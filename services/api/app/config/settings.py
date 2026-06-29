@@ -40,6 +40,14 @@ class Settings(BaseSettings):
     whisper_compute_type: str = "auto"
     whisper_worker_threads: int = 1
 
+    # --- On-device translation (NLLB-200 via CTranslate2) ---
+    # Whisper's `translate` task only ever targets English, so real
+    # multi-language subtitles use a dedicated NLLB-200 distilled model on
+    # the same CTranslate2 backend. The CT2 weights + sentencepiece tokenizer
+    # download from this public HF repo on first translate (no token needed).
+    # int8 keeps it CPU-friendly, matching the Whisper compute defaults.
+    nllb_model_repo: str = "JustFrederik/nllb-200-distilled-600M-ct2-int8"
+
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 
     @property

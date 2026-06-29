@@ -76,9 +76,10 @@ def transcribe(
     """Run faster-whisper on a local media file.
 
     Returns a dict with `detected_language` and a list of `segments`, each
-    `{start, end, text}` (seconds). `task="translate"` translates speech to
-    English; for non-English targets we transcribe in the source language
-    (callers handle target selection at the service layer).
+    `{start, end, text}` (seconds). `task="translate"` is Whisper's own
+    speech->English task and is English-only; multi-language subtitles are
+    produced by transcribing here and then translating the text in
+    `repo/translate_engine.py` (NLLB-200). The service layer wires the two.
     """
     model = _load_model(model_size)
     segments_iter, info = model.transcribe(

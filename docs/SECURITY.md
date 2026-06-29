@@ -25,7 +25,7 @@ Security principles and implementation for the whisper-subtitle-pipeline.
 
 ## No second credential
 
-- Transcription/translation runs on-device (faster-whisper). There is **no external AI provider key** to manage or leak — B2 credentials are the only secret.
+- Transcription (faster-whisper) and translation (NLLB-200) both run on-device on the CTranslate2 backend. There is **no external AI provider key** to manage or leak — B2 credentials are the only secret.
 
 ## Download Safety
 

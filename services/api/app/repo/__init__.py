@@ -11,9 +11,11 @@ from app.repo.b2_client import (
     put_text,
     upload_file,
 )
+from app.repo.translate_engine import UnsupportedLanguageError, translate_segments
 from app.repo.whisper_engine import transcribe
 
 __all__ = [
+    "UnsupportedLanguageError",
     "check_connectivity",
     "delete_file",
     "delete_prefix",
@@ -25,5 +27,6 @@ __all__ = [
     "list_files",
     "put_text",
     "transcribe",
+    "translate_segments",
     "upload_file",
 ]

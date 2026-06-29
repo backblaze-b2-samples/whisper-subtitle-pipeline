@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Play, Pencil, Trash2, Download, FileText } from "lucide-react";
 import { toast } from "sonner";
@@ -73,14 +73,24 @@ export function JobDetail({ id }: { id: string }) {
   const updateJob = useUpdateJob(id);
   const deleteJob = useDeleteJob();
   const [editOpen, setEditOpen] = useState(false);
+  const videoRef = useRef<HTMLVideoElement>(null);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
-  const [trackUrl, setTrackUrl] = useState<string | null>(null);
+  const [trackUrls, setTrackUrls] = useState<Record<string, string>>({});
 
-  // Fetch a presigned source-video URL + the first VTT caption track so the
-  // player can render live captions.
-  const vttArtifact = job?.artifacts.find((a) => a.kind === "vtt");
+  // Fetch a presigned source-video URL plus a presigned URL for EVERY VTT
+  // caption track, so the player can offer each language. A translate job has
+  // two (source + target); we default to the translated one below.
   const sourceKey = job?.source_key;
-  const vttKey = vttArtifact?.key;
+  const vttArtifacts = useMemo(
+    () => job?.artifacts.filter((a) => a.kind === "vtt") ?? [],
+    [job?.artifacts],
+  );
+  // The track shown by default: the translated (target) language when it
+  // exists, otherwise the only (source) track.
+  const defaultVttLang =
+    vttArtifacts.find((a) => a.language === job?.target_language)?.language ??
+    vttArtifacts[0]?.language;
+
   useEffect(() => {
     let active = true;
     if (sourceKey && job?.status === "succeeded") {
@@ -88,15 +98,43 @@ export function JobDetail({ id }: { id: string }) {
         .then((r) => active && setVideoUrl(r.url))
         .catch(() => active && setVideoUrl(null));
     }
-    if (vttKey) {
-      getArtifactUrl(id, vttKey)
-        .then((r) => active && setTrackUrl(r.url))
-        .catch(() => active && setTrackUrl(null));
+    if (vttArtifacts.length > 0) {
+      Promise.all(
+        vttArtifacts.map((a) =>
+          getArtifactUrl(id, a.key)
+            .then((r) => [a.key, r.url] as const)
+            .catch(() => null),
+        ),
+      ).then((pairs) => {
+        if (!active) return;
+        setTrackUrls(
+          Object.fromEntries(
+            pairs.filter((p): p is readonly [string, string] => p !== null),
+          ),
+        );
+      });
     }
     return () => {
       active = false;
     };
-  }, [id, sourceKey, vttKey, job?.status]);
+  }, [id, sourceKey, job?.status, vttArtifacts]);
+
+  // Force the default-language track to actually display. A <track> added to
+  // the DOM after the <video> mounts (our URLs resolve async) is not reliably
+  // shown by the browser, so we set the track modes explicitly once they exist.
+  useEffect(() => {
+    const v = videoRef.current;
+    if (!v || !defaultVttLang) return;
+    const apply = () => {
+      for (let i = 0; i < v.textTracks.length; i++) {
+        const t = v.textTracks[i];
+        t.mode = t.language === defaultVttLang ? "showing" : "disabled";
+      }
+    };
+    apply();
+    v.textTracks.addEventListener("addtrack", apply);
+    return () => v.textTracks.removeEventListener("addtrack", apply);
+  }, [defaultVttLang, trackUrls]);
 
   if (isLoading) {
     return <Skeleton className="h-64 w-full" />;
@@ -217,19 +255,23 @@ export function JobDetail({ id }: { id: string }) {
               {videoUrl ? (
                 <video
                   key={videoUrl}
+                  ref={videoRef}
                   controls
                   className="w-full rounded-md bg-black"
                   crossOrigin="anonymous"
                 >
                   <source src={videoUrl} />
-                  {trackUrl && (
-                    <track
-                      default
-                      kind="subtitles"
-                      srcLang={job.target_language}
-                      label={`Captions (${job.target_language})`}
-                      src={trackUrl}
-                    />
+                  {vttArtifacts.map((a) =>
+                    trackUrls[a.key] ? (
+                      <track
+                        key={a.key}
+                        default={a.language === defaultVttLang}
+                        kind="subtitles"
+                        srcLang={a.language}
+                        label={`Captions (${a.language})`}
+                        src={trackUrls[a.key]}
+                      />
+                    ) : null,
                   )}
                 </video>
               ) : (

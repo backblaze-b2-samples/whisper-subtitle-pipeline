@@ -17,6 +17,16 @@ faster-whisper>=1.1.0,<1.2
 # Pin it explicitly so a fresh clone reproduces.
 requests>=2.31.0
 
+# On-device translation — NLLB-200 distilled (600M) runs on the SAME
+# CTranslate2 backend faster-whisper already pulls in (no torch, no second
+# API key). Whisper's `translate` task can only target English, so real
+# multi-language subtitles need a dedicated model. The CT2 weights +
+# tokenizer download from the Hugging Face Hub on first translate, exactly
+# like the Whisper weights. sentencepiece is NLLB's tokenizer — a small,
+# stable C++ wheel; ctranslate2 + huggingface_hub already come via
+# faster-whisper, so this is the only new runtime dependency.
+sentencepiece>=0.2.0,<0.3
+
 # Dev / quality
 ruff>=0.8.0
 pytest>=8.0.0

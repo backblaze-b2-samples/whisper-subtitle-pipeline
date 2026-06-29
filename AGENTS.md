@@ -13,8 +13,9 @@ apps/web/          Next.js 16 frontend (App Router, Tailwind v4, shadcn/ui)
   src/app/library/     Scoped caption library (/library)
   src/components/jobs/ Job form (create/edit), list, detail, status badge
 services/api/      FastAPI backend (layered: types/config/repo/service/runtime)
-  app/repo/whisper_engine.py   faster-whisper adapter (the only ML import)
-  app/service/pipeline.py      B2 -> transcribe(+translate) -> B2 orchestration
+  app/repo/whisper_engine.py   faster-whisper adapter (speech ML import)
+  app/repo/translate_engine.py NLLB-200 translation adapter (text ML import)
+  app/service/pipeline.py      B2 -> transcribe (+ NLLB translate) -> B2 orchestration
   app/service/subtitles.py     SRT / VTT / JSON formatters (pure)
   app/service/jobs.py          Job store + manifest (system of record in B2)
   app/runtime/{jobs,library}.py  Job CRUD+run + library/dashboard routes
@@ -24,7 +25,7 @@ docs/exec-plans/   Execution plans and tech debt tracker
 infra/railway/     Deployment config
 ```
 
-**Where the ML lives.** The faster-whisper / CTranslate2 dependency is imported **only** in `services/api/app/repo/whisper_engine.py` (lazily, inside functions). Storage stays on boto3 in `repo/b2_client.py`. Nothing outside `repo/` touches either SDK — enforced by `tests/test_structure.py`.
+**Where the ML lives.** The ML dependencies (CTranslate2-backed) are imported **only** in the `repo/` adapters: faster-whisper for speech in `services/api/app/repo/whisper_engine.py`, and NLLB-200 for text translation in `services/api/app/repo/translate_engine.py` (both lazily, inside functions). Whisper's own `translate` task can only target English, so real multi-language subtitles go through the NLLB adapter on the transcribed text. Storage stays on boto3 in `repo/b2_client.py`. Nothing outside `repo/` touches these SDKs — enforced by `tests/test_structure.py`.
 
 ## 2. Building on the Starter Kit
 

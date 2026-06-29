@@ -13,7 +13,7 @@
   - Dark mode via `next-themes`
 - **services/api/** — FastAPI backend (layered architecture)
   - REST API for the Subtitle Job lifecycle, library, and dashboard metrics
-  - faster-whisper transcription/translation engine (on-device, in `repo/`)
+  - faster-whisper transcription + NLLB-200 translation engines (on-device, in `repo/`)
   - B2 S3 integration via boto3 (single shared client, custom user agent)
   - Health check endpoint with B2 connectivity verification
   - Structured JSON logging with request tracing
@@ -43,7 +43,7 @@ runtime/   FastAPI routes — calls service, never repo directly
 1. Dependencies flow downward only: `types` -> `config` -> `repo` -> `service` -> `runtime`
 2. No backward imports (e.g., service must not import from runtime)
 3. `boto3` only allowed in `repo/` layer
-4. **faster-whisper / ctranslate2 only imported in `repo/whisper_engine.py`** (lazily, inside functions) — the heavy ML dependency is contained exactly like the storage SDK
+4. **The ML dependencies (faster-whisper for speech, NLLB-200 for translation, both on ctranslate2) are imported only in the `repo/` adapters `whisper_engine.py` and `translate_engine.py`** (lazily, inside functions) — contained exactly like the storage SDK
 5. All boundary data uses Pydantic models (no raw dicts across layers)
 6. Each file stays under 300 lines
 
@@ -55,7 +55,7 @@ services/api/
   app/
     types/                 Pydantic models (Job, LibraryEntry, PipelineStats, FileMetadata, ...)
     config/                Settings loaded from environment (B2_* + WHISPER_*)
-    repo/                  B2 S3 client (b2_client.py) + faster-whisper engine (whisper_engine.py)
+    repo/                  B2 S3 client (b2_client.py) + ML engines (whisper_engine.py, translate_engine.py)
     service/               Business logic (jobs, pipeline, subtitles, library, upload, files)
     runtime/               FastAPI route handlers (jobs, library, upload, files, health, metrics)
   tests/                   pytest tests (structural + unit + signature guards)
@@ -88,7 +88,7 @@ services/api/
 ## External Services
 
 - **Backblaze B2 S3 API** — storage, retrieval, deletion, presigned URLs
-- **No external AI provider.** Transcription/translation runs **on-device** via faster-whisper. Whisper model weights download once from Hugging Face (public — no token). There is no second API key; B2 credentials only.
+- **No external AI provider.** Transcription runs **on-device** via faster-whisper; translation runs **on-device** via NLLB-200 (both on the CTranslate2 backend). Model weights download once from Hugging Face (public — no token). There is no second API key; B2 credentials only.
 
 ## Trust Boundaries
 
@@ -103,7 +103,7 @@ See [docs/SECURITY.md](docs/SECURITY.md) for full security documentation.
 - **Upload source video**: Browser -> `POST /upload` (multipart) -> API validates video type -> repo `put_object` to `source/<filename>` -> response
 - **Create + run a Subtitle Job** (primary pipeline):
   1. Browser -> `POST /jobs` -> service validates the `source/` key, writes a `pending` job to `captions/manifest.json`, and schedules it on a single-worker background executor; returns immediately.
-  2. Worker: repo `download_to_path` pulls the source video from B2 to a temp file -> `whisper_engine.transcribe` runs faster-whisper on-device (transcribe, then optionally translate) -> `subtitles.py` renders SRT/VTT/JSON -> repo `put_text` writes them to `captions/<job_id>/` -> manifest updated to `succeeded`.
+  2. Worker: repo `download_to_path` pulls the source video from B2 to a temp file -> `whisper_engine.transcribe` runs faster-whisper on-device to get the source transcript -> for a translate job, `translate_engine.translate_segments` runs NLLB-200 on that transcript to produce the target-language text (timings preserved) -> `subtitles.py` renders SRT/VTT/JSON for each language -> repo `put_text` writes them to `captions/<job_id>/` -> manifest updated to `succeeded`.
   3. UI polls `GET /jobs/{id}` via TanStack Query `refetchInterval` while `running`, showing the generating-loader.
 - **Read a job**: Browser -> `GET /jobs` / `GET /jobs/{id}` -> service merges live registry + manifest.
 - **Edit a job**: Browser -> `PATCH /jobs/{id}` -> updates settings (does not auto-run).
@@ -125,7 +125,8 @@ See [docs/SECURITY.md](docs/SECURITY.md) for full security documentation.
 - Pipeline orchestration: `services/api/app/service/pipeline.py`
 - Job store + manifest: `services/api/app/service/jobs.py`
 - Subtitle formatters: `services/api/app/service/subtitles.py`
-- faster-whisper adapter (the only ML import): `services/api/app/repo/whisper_engine.py`
+- faster-whisper adapter (speech ML import): `services/api/app/repo/whisper_engine.py`
+- NLLB-200 translation adapter (text ML import): `services/api/app/repo/translate_engine.py`
 - B2 data access (repo layer): `services/api/app/repo/b2_client.py`
 - Pydantic models: `services/api/app/types/` (`jobs.py`, `library.py`, `files.py`, `stats.py`, `formatting.py`)
 - Config (pydantic-settings): `services/api/app/config/settings.py`

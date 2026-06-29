@@ -14,3 +14,4 @@ Known tech debt items. Agents update this when they discover or create tech debt
 | `humanizeBytes` duplicated in TypeScript | DRY violation | Extract to `lib/utils.ts` | Low | Open |
 | `formatDate` duplicated in TypeScript | DRY violation | Extract to `lib/utils.ts` | Low | Open |
 | No test harness for feature specs | No automated verification | Add pytest fixtures + test files per feature | Medium | Resolved (partial — tests added for upload, files, activity, errors) |
+| Translation emitted original-language text (Whisper `translate` is English-only) | Target-language caption sets were wrong/duplicated | Translate transcript text with on-device NLLB-200 in `repo/translate_engine.py` | High | Resolved (see `exec-plans/completed/fix-translation-nllb.md`) |

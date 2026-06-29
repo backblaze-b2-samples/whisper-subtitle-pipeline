@@ -11,7 +11,7 @@ import tempfile
 from concurrent.futures import ThreadPoolExecutor
 
 from app.config import settings
-from app.repo import download_to_path, put_text, transcribe
+from app.repo import download_to_path, put_text, transcribe, translate_segments
 from app.service.subtitles import to_srt, to_transcript_json, to_vtt
 from app.types import CaptionArtifact, Job
 from app.types.formatting import humanize_bytes
@@ -100,21 +100,25 @@ def run_job(job: Job, *, on_update) -> Job:
         job.progress = 65
         on_update(job)
 
-        # 2. Optionally translate (Whisper's translate task targets English).
-        if job.task == "translate" and job.target_language not in (
-            source_lang,
-            "auto",
+        # 2. Optionally translate the transcript into the target language.
+        # Whisper's own `translate` task can only target English, so we
+        # translate the transcribed text with NLLB-200 (see
+        # repo/translate_engine.py) and keep the source timings.
+        if (
+            job.task == "translate"
+            and detected
+            and job.target_language not in (detected, "auto", "", None)
         ):
-            logger.info("Job %s: translating to %s", job.id, job.target_language)
-            tgt = transcribe(
-                tmp_path,
-                model_size=job.model_size,
-                task="translate",
-                language=job.source_language,
+            target_lang = job.target_language
+            logger.info(
+                "Job %s: translating %s -> %s", job.id, detected, target_lang
             )
-            # Whisper translate emits English; label by the requested target
-            # so the player/track picks it up, defaulting to "en".
-            target_lang = job.target_language or "en"
+            translated = translate_segments(
+                src["segments"],
+                source_language=detected,
+                target_language=target_lang,
+            )
+            tgt = {"segments": translated, "duration_seconds": duration}
             artifacts += _write_artifacts(job.id, target_lang, tgt)
             languages.append(target_lang)
 

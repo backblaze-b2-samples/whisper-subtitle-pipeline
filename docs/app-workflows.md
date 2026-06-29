@@ -23,7 +23,7 @@ User journeys inside the application.
   - Create-form safe defaults appear as `FormDescription` hints (never an autofill button): model **base**, source **Auto-detect**, target **English**, task **Transcribe + Translate**
 - Submitting calls `POST /jobs`, which enqueues a `pending` job and auto-runs it, then routes to `/jobs/[id]`
 - The detail page polls `GET /jobs/{id}` while `running`, showing the "Transcribing…" generating-loader
-- On success: an embedded video player renders with a live VTT caption track; the transcript artifacts (SRT/VTT/JSON per language) are listed with download buttons
+- On success: an embedded video player renders a VTT caption track per language, defaulting to the translated (target) track for translate jobs (the source track is still selectable in the player's caption menu); the transcript artifacts (SRT/VTT/JSON per language) are listed with download buttons
 - See: [Local Transcription](features/transcription.md), [Translation](features/translation.md), [Subtitle Export](features/subtitle-export.md)
 
 ## Edit, Re-run, or Delete a Job

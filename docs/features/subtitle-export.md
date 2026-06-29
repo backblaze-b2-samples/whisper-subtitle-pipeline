@@ -5,7 +5,7 @@
 Turn timestamped transcript segments into standard caption artifacts and write them back to Backblaze B2 — demonstrating the 3–5× derived-data multiplier each video produces.
 
 ## Used By
-- UI: `/jobs/[id]` detail — VTT powers the live player track; SRT/VTT/JSON are downloadable
+- UI: `/jobs/[id]` detail — each language's VTT powers a player caption `<track>` (the player renders one per language and defaults to the translated/target track for translate jobs); SRT/VTT/JSON are downloadable
 - API: `GET /jobs/{id}/artifacts/url` (presigned download links)
 - Job: `service/pipeline.py` writes artifacts during a run
 
@@ -20,7 +20,7 @@ Turn timestamped transcript segments into standard caption artifacts and write t
 
 ## Outputs
 - `captions/<job_id>/{lang}.srt` — SubRip
-- `captions/<job_id>/{lang}.vtt` — WebVTT (consumed directly by the player `<track>`)
+- `captions/<job_id>/{lang}.vtt` — WebVTT (consumed directly by the player `<track>`, one per language)
 - `captions/<job_id>/{lang}.transcript.json` — segments + full text + metadata
 - These are the **derived artifacts** counted in the dashboard's derived/source ratio
 

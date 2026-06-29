@@ -32,7 +32,7 @@ A self-hosted, open-source batch subtitling and translation service for video li
 ## Features
 
 - **Local transcription** — [faster-whisper](https://github.com/SYSTRAN/faster-whisper) (CTranslate2-accelerated Whisper) produces word/segment-timestamped transcripts entirely on-device. See [docs/features/transcription.md](docs/features/transcription.md).
-- **Translation** — re-run through Whisper's translate task to emit a target language alongside the source. See [docs/features/translation.md](docs/features/translation.md).
+- **Translation** — translate the transcript into a target language with **NLLB-200** (on-device, same CTranslate2 backend) and emit a second caption set alongside the source. (Whisper's own translate task is English-only; NLLB covers the full language list.) See [docs/features/translation.md](docs/features/translation.md).
 - **SRT + VTT + JSON export** — derived caption artifacts written to `captions/<job_id>/` in B2. See [docs/features/subtitle-export.md](docs/features/subtitle-export.md).
 - **Caption library + manifest** — a scoped `/library` view of source videos and their caption sets, backed by `captions/manifest.json`. See [docs/features/caption-library.md](docs/features/caption-library.md).
 - **Subtitle pipeline dashboard** — videos processed, caption files generated, languages covered, the headline **derived/source storage ratio**, and total B2 usage. See [docs/features/dashboard.md](docs/features/dashboard.md).
@@ -46,7 +46,10 @@ The primary entity is a **Subtitle Job** — one transcription(+translation) of 
 B2 source/<video>  --get_object-->  local temp file
         |
         v
-  faster-whisper transcribe (+ optional translate)   [on-device: CUDA -> CPU]
+  faster-whisper transcribe   [on-device: CUDA -> CPU]
+        |
+        v
+  (translate jobs) NLLB-200 translate transcript -> target language
         |
         v
   SRT / VTT / transcript JSON  --put_object-->  B2 captions/<job_id>/
@@ -76,7 +79,7 @@ pip install -r requirements.txt
 cd ../..
 ```
 
-> The first transcription downloads the Whisper model weights from Hugging Face (`base` is ~140 MB). Whisper models are **public — no token required**.
+> The first transcription downloads the Whisper model weights from Hugging Face (`base` is ~140 MB), and the first **translate** job downloads the NLLB-200 distilled model (~600 MB, int8). Both are **public — no token required** and cached after the first run.
 
 **3. Add your B2 credentials**
 
@@ -124,7 +127,7 @@ No system `ffmpeg` is required — faster-whisper decodes audio via bundled PyAV
 
 - TypeScript, Next.js 16, React 19, Tailwind v4, shadcn/ui
 - TanStack Query — caching, dedup, and live polling for running jobs
-- Python 3.11+, FastAPI, boto3, Pydantic v2, **faster-whisper** (CTranslate2)
+- Python 3.11+, FastAPI, boto3, Pydantic v2, **faster-whisper** + **NLLB-200** (both on CTranslate2)
 - Backblaze B2 (S3-compatible object storage)
 - pnpm workspaces (monorepo)
 
