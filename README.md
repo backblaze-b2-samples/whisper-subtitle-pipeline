@@ -7,6 +7,28 @@ A self-hosted, open-source batch subtitling and translation service for video li
 
 **Audience:** video production teams, streaming platforms, and AI/dev teams that want an open, self-hosted alternative to hosted transcription APIs.
 
+## What it looks like
+
+**Dashboard** — subtitle-pipeline metrics (videos processed, caption files, languages covered, the headline derived/source storage ratio, and total B2 usage), a source-vs-derived storage breakdown, and the most recent jobs.
+
+![Dashboard with subtitle-pipeline metrics, storage breakdown, and recent jobs](docs/images/dashboard.png)
+
+**Subtitle Jobs** — every transcription/translation run across your source videos, with task, model, creation time, and status.
+
+![Subtitle Jobs list showing transcribe and translate runs across source videos](docs/images/jobs.png)
+
+**Job detail** — an in-browser player for the source video alongside the SRT, VTT, and transcript-JSON caption artifacts (one set per language) written back to B2.
+
+![Job detail with video player and downloadable SRT, VTT, and JSON caption artifacts](docs/images/job-detail.png)
+
+**Caption Library** — source videos under `source/` grouped with the caption sets derived from them under `captions/`, each tagged by language.
+
+![Caption Library grouping source videos with their derived caption sets by language](docs/images/library.png)
+
+**Upload** — drag-and-drop source videos straight into the `source/` prefix in B2, ready to subtitle from the Jobs page.
+
+![Upload page with a drag-and-drop zone for source videos](docs/images/upload.png)
+
 ## Features
 
 - **Local transcription** — [faster-whisper](https://github.com/SYSTRAN/faster-whisper) (CTranslate2-accelerated Whisper) produces word/segment-timestamped transcripts entirely on-device. See [docs/features/transcription.md](docs/features/transcription.md).
