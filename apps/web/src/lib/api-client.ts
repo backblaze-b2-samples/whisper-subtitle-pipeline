@@ -1,0 +1,263 @@
+import type {
+  DailyUploadCount,
+  FileMetadata,
+  FileUploadResponse,
+  Job,
+  JobCreate,
+  JobOptions,
+  LibraryEntry,
+  PipelineStats,
+  UploadStats,
+} from "@whisper-subtitle-pipeline/shared";
+
+export const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+
+/** Typed API error with HTTP status code for caller-side branching. */
+export class ApiError extends Error {
+  constructor(
+    message: string,
+    public readonly status: number,
+  ) {
+    super(message);
+    this.name = "ApiError";
+  }
+
+  /** True for 408, 429, 500, 502, 503, 504 — worth retrying. */
+  get isRetryable(): boolean {
+    return [408, 429, 500, 502, 503, 504].includes(this.status);
+  }
+
+  get isNotFound(): boolean {
+    return this.status === 404;
+  }
+
+  get isConflict(): boolean {
+    return this.status === 409;
+  }
+}
+
+async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE}${path}`, init);
+  } catch {
+    // Network failure (offline, DNS, CORS, etc.)
+    throw new ApiError("Network error — check your connection", 0);
+  }
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new ApiError(
+      body.detail || `API error: ${res.status}`,
+      res.status,
+    );
+  }
+  return res.json();
+}
+
+function isEndpointUnavailable(error: unknown): error is ApiError {
+  return (
+    error instanceof ApiError &&
+    error.status === 404 &&
+    (error.message === "Not Found" || error.message === "API error: 404")
+  );
+}
+
+async function apiFetchWithLegacyFallback<T>(
+  path: string,
+  legacyPath: () => string,
+  init?: RequestInit
+): Promise<T> {
+  try {
+    return await apiFetch<T>(path, init);
+  } catch (error) {
+    if (isEndpointUnavailable(error)) {
+      return apiFetch<T>(legacyPath(), init);
+    }
+    throw error;
+  }
+}
+
+function fileKeyQuery(key: string): string {
+  if (key.length === 0) {
+    throw new ApiError("File key is required", 400);
+  }
+  return new URLSearchParams({ key }).toString();
+}
+
+function legacyFileKeyPath(
+  key: string,
+  options: { blockRouteCollisions?: boolean } = {}
+): string {
+  if (!isLegacyPathFallbackSafe(key, options)) {
+    throw new ApiError("Current API version required for this file key", 404);
+  }
+  return encodeURIComponent(key);
+}
+
+function isLegacyPathFallbackSafe(
+  key: string,
+  { blockRouteCollisions = false }: { blockRouteCollisions?: boolean } = {}
+): boolean {
+  if (/(\.\.\/|\/\.\.|\\|%2e%2e|%00|\x00)/i.test(key)) return false;
+  if (!blockRouteCollisions) return true;
+
+  const lowerKey = key.toLowerCase();
+  if (lowerKey === "stats" || lowerKey === "stats/activity") return false;
+  if (lowerKey.endsWith("/download") || lowerKey.endsWith("/preview")) return false;
+  return true;
+}
+
+export async function getHealth() {
+  return apiFetch<{ status: string; b2_connected: boolean }>("/health");
+}
+
+export async function getFiles(prefix = "", limit = 100) {
+  return apiFetch<FileMetadata[]>(
+    `/files?prefix=${encodeURIComponent(prefix)}&limit=${limit}`
+  );
+}
+
+export async function getFileStats() {
+  return apiFetch<UploadStats>("/files/stats");
+}
+
+export async function getUploadActivity(days = 7) {
+  return apiFetch<DailyUploadCount[]>(`/files/stats/activity?days=${days}`);
+}
+
+export async function getFile(key: string) {
+  return apiFetchWithLegacyFallback<FileMetadata>(
+    `/files-by-key/metadata?${fileKeyQuery(key)}`,
+    () => `/files/${legacyFileKeyPath(key, { blockRouteCollisions: true })}`
+  );
+}
+
+export async function getDownloadUrl(key: string) {
+  return apiFetchWithLegacyFallback<{ url: string }>(
+    `/files-by-key/download?${fileKeyQuery(key)}`,
+    () => `/files/${legacyFileKeyPath(key)}/download`
+  );
+}
+
+/** Preview-only presigned URL — does NOT increment the download counter. */
+export async function getPreviewUrl(key: string) {
+  return apiFetchWithLegacyFallback<{ url: string }>(
+    `/files-by-key/preview?${fileKeyQuery(key)}`,
+    () => `/files/${legacyFileKeyPath(key)}/preview`
+  );
+}
+
+export async function deleteFile(key: string) {
+  return apiFetchWithLegacyFallback<{ deleted: boolean; key: string }>(
+    `/files-by-key?${fileKeyQuery(key)}`,
+    () => `/files/${legacyFileKeyPath(key)}`,
+    {
+      method: "DELETE",
+    }
+  );
+}
+
+export function uploadFile(
+  file: File,
+  onProgress?: (percent: number) => void
+): Promise<FileUploadResponse> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    const formData = new FormData();
+    formData.append("file", file);
+
+    xhr.upload.addEventListener("progress", (e) => {
+      if (e.lengthComputable && onProgress) {
+        onProgress(Math.round((e.loaded / e.total) * 100));
+      }
+    });
+
+    xhr.addEventListener("load", () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        resolve(JSON.parse(xhr.responseText));
+      } else {
+        try {
+          const body = JSON.parse(xhr.responseText);
+          reject(new ApiError(body.detail || `Upload failed: ${xhr.status}`, xhr.status));
+        } catch {
+          reject(new ApiError(`Upload failed: ${xhr.status}`, xhr.status));
+        }
+      }
+    });
+
+    xhr.addEventListener("error", () =>
+      reject(new ApiError("Network error — check your connection", 0)),
+    );
+    xhr.addEventListener("abort", () =>
+      reject(new ApiError("Upload aborted", 0)),
+    );
+
+    xhr.open("POST", `${API_BASE}/upload`);
+    xhr.send(formData);
+  });
+}
+
+// --- Subtitle jobs ---
+
+export async function getJobOptions() {
+  return apiFetch<JobOptions>("/jobs/options");
+}
+
+export async function getJobs() {
+  return apiFetch<Job[]>("/jobs");
+}
+
+export async function getJob(id: string) {
+  return apiFetch<Job>(`/jobs/${encodeURIComponent(id)}`);
+}
+
+export async function createJob(payload: JobCreate) {
+  return apiFetch<Job>("/jobs", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function updateJob(id: string, payload: JobCreate) {
+  return apiFetch<Job>(`/jobs/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function runJob(id: string) {
+  return apiFetch<Job>(`/jobs/${encodeURIComponent(id)}/run`, {
+    method: "POST",
+  });
+}
+
+export async function deleteJob(id: string) {
+  return apiFetch<{ deleted: boolean; id: string }>(
+    `/jobs/${encodeURIComponent(id)}`,
+    { method: "DELETE" },
+  );
+}
+
+export async function getArtifactUrl(jobId: string, key: string) {
+  return apiFetch<{ url: string }>(
+    `/jobs/${encodeURIComponent(jobId)}/artifacts/url?key=${encodeURIComponent(key)}`,
+  );
+}
+
+// --- Caption library ---
+
+export async function getLibrary() {
+  return apiFetch<LibraryEntry[]>("/library");
+}
+
+export async function getPipelineStats() {
+  return apiFetch<PipelineStats>("/library/stats");
+}
+
+export async function getSourceUrl(key: string) {
+  return apiFetch<{ url: string }>(
+    `/library/source-url?key=${encodeURIComponent(key)}`,
+  );
+}

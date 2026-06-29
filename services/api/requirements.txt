@@ -1,0 +1,24 @@
+fastapi>=0.115.0
+uvicorn[standard]>=0.34.0
+python-multipart>=0.0.18
+python-dotenv>=1.0.0
+pydantic>=2.10.0
+pydantic-settings>=2.7.0
+boto3>=1.35.0
+
+# Subtitle pipeline — on-device transcription/translation engine.
+# faster-whisper pulls a compatible ctranslate2 + av/PyAV + tokenizers +
+# onnxruntime + huggingface_hub. Pinned to a window so a fresh clone
+# reproduces (an unbounded ML dep is a false green — boots + unit tests
+# pass while the model load breaks on a clean install).
+faster-whisper>=1.1.0,<1.2
+# faster-whisper 1.1.x imports `requests` in utils.py but doesn't declare it
+# as a dependency, so a clean install crashes on `import faster_whisper`.
+# Pin it explicitly so a fresh clone reproduces.
+requests>=2.31.0
+
+# Dev / quality
+ruff>=0.8.0
+pytest>=8.0.0
+pytest-asyncio>=0.24.0
+httpx>=0.27.0
