@@ -41,14 +41,18 @@ jobs:
         if: ${{ hashFiles('apps/web/package.json') != '' }}
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "20.9.0"
+
+      - name: Set up pnpm
+        if: ${{ hashFiles('apps/web/package.json') != '' }}
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.23.0 --activate
 
       - name: Install frontend dependencies
         if: ${{ hashFiles('apps/web/package.json') != '' }}
-        working-directory: apps/web
-        run: npm install
+        run: pnpm install --frozen-lockfile
 
       - name: Typecheck frontend
         if: ${{ hashFiles('apps/web/package.json') != '' }}
-        working-directory: apps/web
-        run: npm run typecheck
+        run: pnpm typecheck

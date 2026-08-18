@@ -1,4 +1,4 @@
-<!-- last_verified: 2026-06-25 -->
+<!-- last_verified: 2026-08-17 -->
 # Dev Workflows
 
 Engineering workflows for this repo.
@@ -40,6 +40,12 @@ Engineering workflows for this repo.
 - [ ] Run full lint + test suite before submitting
 - [ ] Docs updated in the same PR as code changes
 - [ ] Only change files relevant to the task — no drive-by improvements
+
+## CI
+
+- GitHub Actions uses pnpm from the repository root.
+- Install workspace dependencies with `pnpm install --frozen-lockfile`.
+- Keep the workflow Node version aligned with `engines.node` in `package.json`.
 
 ## Testing
 
